@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+# 
+# Script to open and flock its first argument
+#
+# then exec the rest of its args
+#
+# Original source:
+#
+# https://github.com/thorfi/simple-scripts
+
+import errno
+import fcntl
+import os
+import sys
+import time
+
+def usage_exit():
+    print >>sys.stderr, "Usage: %s /path/to/lock.file command to run" \
+        % (sys.argv[0],)
+    sys.exit(0)
+
+def iso_time(utc_epoch = None):
+    return time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime(utc_epoch))
+
+def oserr_exit(exc, filename = None):
+    suffix = ''
+    if exc.filename is None and filename is not None:
+        suffix = ': %r' % (filename,)
+    print >>sys.stderr, "%s: %s%s" % (sys.argv[0], exc, suffix)
+    sys.exit(1)
+    os._exit(1)
+
+################################################################################
+def main():
+    if len(sys.argv) < 3:
+        usage_exit()
+
+    start_t = time.time()
+    oexcl_path = sys.argv[1]
+    try:
+        oexcl_fd = os.open(oexcl_path, os.O_RDWR|os.O_CREAT)
+    except OSError, exc:
+        oserr_exit(exc, oexcl_path)
+        assert False
+    try:
+        fcntl.flock(oexcl_fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+        flock_t = time.time()
+        #fcntl.lockf(oexcl_fd, fcntl.LOCK_EX|fcntl.LOCK_NB)
+        #lockf_t = time.time()
+    except OSError, exc:
+        if exc.errno in (errno.EAGAIN, ):
+            sys.exit(1)
+            os._exit(1)
+        oserr_exit(exc, oexcl_path)
+        assert False
+    except IOError, exc:
+        if exc.errno in (errno.EAGAIN, ):
+            sys.exit(1)
+            os._exit(1)
+        oserr_exit(exc, oexcl_path)
+        assert False
+    os.write(oexcl_fd,
+        "%s\nmain() %s\nflock()ed %s\nsys.argv = %r\n" \
+        % (os.getpid(),
+            iso_time(start_t), iso_time(flock_t),
+            sys.argv,))
+    try:
+        os.execvp(sys.argv[2], sys.argv[2:])
+    except OSError, exc:
+        oserr_exit(exc, sys.argv[2])
+        assert False
+    sys.exit(255)
+    os._exit(255)
+    assert False
+
+################################################################################
+if __name__=="__main__":
+    main()
+#EOF
