@@ -1,0 +1,43 @@
+#!/usr/bin/env python
+#
+# $Id: pingbell,v 1.4 2014/04/09 04:51:33 dtg Exp $
+# $Source: /Users/dtg/bin/RCS/pingbell,v $
+
+import errno
+import os
+import signal
+import subprocess
+import sys
+import time
+
+def main():
+    args = list(sys.argv)
+    args[0] = 'ping'
+    p = subprocess.Popen(args, stdin=None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, close_fds=True)
+    def handle_sig(sig, stack):
+        os.kill(p.pid, sig)
+    for sig in (signal.SIGTERM, signal.SIGINT, ):
+        signal.signal(sig, handle_sig)
+    p_out = p.stdout
+    sys_out = sys.stdout
+    line = True
+    while line:
+        try:
+            line = p_out.readline()
+        except IOError, exc:
+            if exc.errno not in (
+                errno.EINTR,
+                errno.EAGAIN,
+                errno.ETIMEDOUT,
+                ): raise
+        if 'bytes from' in line and 'time=' in line:
+            sys_out.write('\x07')
+        iso_str = time.strftime('%Y-%m-%dT%H:%M:%S%z ', time.localtime())
+        sys_out.write(iso_str)
+        sys_out.write(line)
+        sys_out.flush()
+
+if __name__ == '__main__':
+    main()
